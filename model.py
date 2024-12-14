@@ -102,14 +102,47 @@ class MultiHeadAttention(nn.Module):
 
         assert d_model % n_heads == 0, "d_model must be divisible by n_heads"
         self.d_k = d_model // n_heads
-        self.w_q = nn.Linear(d_model, d_model, bias=False)
+        self.w_q = nn.Linear(d_model, d_model, bias=False) 
         self.w_k = nn.Linear(d_model, d_model, bias=False)
         self.w_v = nn.Linear(d_model, d_model, bias=False)
         self.w_o = nn.Linear(d_model, d_model, bias=False)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, Q, K, V, mask):
-        pass
+        """
+
+        """
+        # Linear projections/transformations
+        # (batch x seq_len x d_model) --> 
+        # (batch x seq_len x d_model)
+        Q = self.w_q(Q)
+        K = self.w_k(K)
+        V = self.w_v(V)
+
+        # Split heads: d_model -> n_heads x d_k
+        # (batch x seq_len x d_model) 
+        # --> (batch x seq_len x n_heads x d_k) 
+        # --> (batch x n_heads x seq_len x d_k)
+        Q = Q.view(Q.shape[0], Q.shape[1], self.n_heads, self.d_k).transpose(1, 2)
+        K = K.view(K.shape[0], K.shape[1], self.n_heads, self.d_k).transpose(1, 2)
+        V = V.view(V.shape[0], V.shape[1], self.n_heads, self.d_k).transpose(1, 2)
+
+        # Apply attention
+        # (batch x n_heads x seq_len x d_k) --> 
+        # (batch x n_heads x seq_len x d_k), : x
+        # (batch x n_heads x seq_len x seq_len) : attention_scores
+        x, self.attention_scores = MultiHeadAttention.attention(Q, K, V, mask, self.dropout)
+
+        # Concatenate heads
+        # (batch x n_heads x seq_len x d_k) --> 
+        # (batch x seq_len x d_model)
+        x = x.transpose(1, 2).contiguous().view(x.shape[0], -1, self.d_model)
+
+        # Linear projection
+        # (batch x seq_len x d_model) -->         
+        # (batch x seq_len x d_model)
+        return self.w_o(x)
+    
 
     @staticmethod
     def attention(Q, K, V, mask, dropout: nn.Dropout):
